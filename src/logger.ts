@@ -17,7 +17,7 @@ export class LogManager {
     constructor(app: App, plugin: Plugin) {
         this.app = app;
         this.plugin = plugin;
-        this.logFilePath = `${this.plugin.manifest.dir}/debug.log`;
+        this.logFilePath = `${this.app.vault.configDir}/plugins/${this.plugin.manifest.id}/debug.log`;
     }
 
     public setEnabled(enabled: boolean) {

@@ -98,6 +98,45 @@ export default class SpacetimeSyncPlugin extends Plugin {
                 new Notice("SpacetimeDB: Logs cleared.");
             }
         });
+
+        this.addCommand({
+            id: 'spacetime-copy-connection-url',
+            name: 'Copy Connection URL',
+            callback: () => {
+                const url = `spacetimedb://${this.settings.host}?db=${this.settings.dbName}`;
+                navigator.clipboard.writeText(url);
+                new Notice("SpacetimeDB: Connection URL copied to clipboard.");
+            }
+        });
+
+        this.addCommand({
+            id: 'spacetime-apply-connection-url',
+            name: 'Apply Connection URL from Clipboard',
+            callback: async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text.startsWith('spacetimedb://')) {
+                        const url = new URL(text.replace('spacetimedb://', 'http://'));
+                        const host = `ws://${url.host}${url.pathname === '/' ? '' : url.pathname}`;
+                        const dbName = url.searchParams.get('db');
+                        
+                        if (host && dbName) {
+                            this.settings.host = host;
+                            this.settings.dbName = dbName;
+                            await this.saveSettings();
+                            new Notice(`SpacetimeDB: Applied settings for ${dbName}`);
+                        } else {
+                            new Notice("SpacetimeDB: Invalid Connection URL format.");
+                        }
+                    } else {
+                        new Notice("SpacetimeDB: Clipboard does not contain a valid SpacetimeDB URL.");
+                    }
+                } catch (e) {
+                    new Notice("SpacetimeDB: Failed to read clipboard.");
+                    this.logger.error("Failed to read clipboard", e);
+                }
+            }
+        });
     }
 
     onunload() {
@@ -407,5 +446,47 @@ class SpacetimeSyncSettingTab extends PluginSettingTab {
                     this.plugin.settings.dbName = value;
                     await this.plugin.saveSettings();
                 }));
+
+        containerEl.createEl('h3', { text: 'Debug Logging' });
+
+        new Setting(containerEl)
+            .setName('Enable Debug Logging')
+            .setDesc('Write detailed logs to debug.log in the plugin folder. Useful for troubleshooting Android crashes.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.debugLogging)
+                .onChange(async (value) => {
+                    this.plugin.settings.debugLogging = value;
+                    // @ts-ignore
+                    this.plugin.logger.setEnabled(value);
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Clear Debug Logs')
+            .setDesc('Delete all content from the debug.log file.')
+            .addButton(button => button
+                .setButtonText('Clear Logs')
+                .onClick(async () => {
+                    // @ts-ignore
+                    await this.plugin.logger.clearLogs();
+                    new Notice('SpacetimeDB: Logs cleared.');
+                }));
+
+        containerEl.createEl('p', { text: 'You can also open the log file directly: ' })
+            .createEl('a', { 
+                text: 'debug.log', 
+                href: '#',
+                cls: 'internal-link' 
+            })
+            .onClickEvent(async (e) => {
+                e.preventDefault();
+                // @ts-ignore
+                const file = await this.plugin.logger.getLogFile();
+                if (file) {
+                    this.app.workspace.getLeaf().openFile(file);
+                } else {
+                    new Notice("No log file found.");
+                }
+            });
     }
 }
