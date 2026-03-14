@@ -15,6 +15,16 @@ All notable changes to this project will be documented in this file.
 ## [0.1.3] - 2026-03-14
 
 ### Added
+
+### Changed
+
+### Fixed
+
+---
+
+## [0.1.3] - 2026-03-14
+
+### Added
 - Robust file-based logging system to debug Android crashes.
 - `LogManager` utility for writing logs to `debug.log` in the plugin folder.
 - "Enable Debug Logging" and "Clear Debug Logs" settings.
