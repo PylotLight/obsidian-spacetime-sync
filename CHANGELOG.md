@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.1.5] - 2026-03-14
+## [0.1.6] - 2026-03-14
 
 ### Added
 - "Copy Connection URL" command to export settings for mobile.
@@ -25,6 +25,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Fixed issue where `debug.log` might not be created on some platforms due to path resolution errors.
+- Deployment fix: ensure all source code and assets are included in the release build.
+
+---
+
+## [0.1.5] - 2026-03-14
+- Botched release (missing source files in tag). Replaced by 0.1.6.
 
 ---
 
