@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+---
+
+## [0.1.2] - 2026-03-14
+
+### Added
 - GitHub repository setup.
 - Automated release workflow.
 - `release.sh` script for versioning and tagging.
