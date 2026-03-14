@@ -12,19 +12,23 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.1.4] - 2026-03-14
+## [0.1.5] - 2026-03-14
 
 ### Added
-- Robust file-based logging system to debug Android crashes.
-- `LogManager` utility for writing logs to `debug.log` in the plugin folder.
-- "Enable Debug Logging" and "Clear Debug Logs" settings.
-- `SpacetimeDB: Show Debug Logs` and `SpacetimeDB: Clear Debug Logs` commands.
+- "Copy Connection URL" command to export settings for mobile.
+- "Apply Connection URL from Clipboard" command to simplify mobile setup.
+- Direct link to `debug.log` in plugin settings.
+- Release process workflow for agents.
 
 ### Changed
-- Instrument sync process, connection lifecycle, and remote/local change handling with detailed logs.
+- Improved `LogManager` path resolution for better cross-platform reliability.
 
 ### Fixed
-- Add error boundaries to sync loops to prevent silent failures and help track crashes.
+- Fixed issue where `debug.log` might not be created on some platforms due to path resolution errors.
+
+---
+
+## [0.1.4] - 2026-03-14
 - Deployment fix: ensure UI settings for debug logging are included in the build.
 
 ---
