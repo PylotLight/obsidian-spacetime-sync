@@ -12,6 +12,22 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.1.3] - 2026-03-14
+
+### Added
+- Robust file-based logging system to debug Android crashes.
+- `LogManager` utility for writing logs to `debug.log` in the plugin folder.
+- "Enable Debug Logging" and "Clear Debug Logs" settings.
+- `SpacetimeDB: Show Debug Logs` and `SpacetimeDB: Clear Debug Logs` commands.
+
+### Changed
+- Instrument sync process, connection lifecycle, and remote/local change handling with detailed logs.
+
+### Fixed
+- Add error boundaries to sync loops to prevent silent failures and help track crashes.
+
+---
+
 ## [0.1.2] - 2026-03-14
 
 ### Added
