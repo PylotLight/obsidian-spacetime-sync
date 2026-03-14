@@ -12,27 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.1.3] - 2026-03-14
-
-### Added
-
-### Changed
-
-### Fixed
-
----
-
-## [0.1.3] - 2026-03-14
-
-### Added
-
-### Changed
-
-### Fixed
-
----
-
-## [0.1.3] - 2026-03-14
+## [0.1.4] - 2026-03-14
 
 ### Added
 - Robust file-based logging system to debug Android crashes.
@@ -45,6 +25,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Add error boundaries to sync loops to prevent silent failures and help track crashes.
+- Deployment fix: ensure UI settings for debug logging are included in the build.
+
+---
+
+## [0.1.3] - 2026-03-14
+- Partial rollout of logging system (backend only).
 
 ---
 
