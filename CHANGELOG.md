@@ -12,6 +12,21 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.2.1] - 2026-03-16
+
+### Added
+- **Dynamic Connection Management**: Auto-reconnect loop and online/offline event handlers for robust syncing on mobile.
+- **Debounced Auto-Push**: Efficient background syncing with a configurable bounce period (Push Delay).
+- **Simplified Settings UI**: Replaced redundant toggles with a consolidated "Sync Enabled" switch and a "Sync Mode" (Auto vs Manual) dropdown.
+
+### Changed
+- Replaced "Connected" and "Live Sync" toggles with more intelligent sync behavior.
+- Manual sync now intelligently manages connection state based on current settings.
+
+### Fixed
+
+---
+
 ## [0.2.0] - 2026-03-16
 
 ### Added
