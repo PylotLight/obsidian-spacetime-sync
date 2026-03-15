@@ -1,8 +1,6 @@
-import { Plugin, TFile, TAbstractFile, PluginSettingTab, App, Setting, Notice } from 'obsidian';
+import { Plugin, TFile, TAbstractFile, PluginSettingTab, App, Setting, Notice, Platform } from 'obsidian';
 import { Identity, Timestamp } from 'spacetimedb'; 
 import { DbConnection } from './module_bindings';
-import { Document } from './module_bindings/types';
-import { Platform } from 'obsidian';
 
 interface SpacetimeSyncSettings {
     deviceId: string;
@@ -32,7 +30,10 @@ export default class SpacetimeSyncPlugin extends Plugin {
     private logger!: import('./logger').LogManager;
     private pushTimeout: NodeJS.Timeout | null = null;
     private reconnectTimeout: NodeJS.Timeout | null = null;
+    private disconnectTimeout: NodeJS.Timeout | null = null;
     private isConnecting: boolean = false;
+    private pendingSyncPaths: Set<string> = new Set();
+    private isSyncing: boolean = false;
 
     async onload() {
         // @ts-ignore
@@ -77,6 +78,11 @@ export default class SpacetimeSyncPlugin extends Plugin {
         this.registerEvent(this.app.vault.on('delete', (file) => this.handleLocalDelete(file)));
         this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.handleLocalRename(file, oldPath)));
 
+        this.setupCommands();
+        this.setupNetworkHandlers();
+    }
+
+    private setupCommands() {
         this.addCommand({
             id: 'spacetime-show-logs',
             name: 'Show Debug Logs',
@@ -138,8 +144,9 @@ export default class SpacetimeSyncPlugin extends Plugin {
                 }
             }
         });
+    }
 
-        // Online/Offline handlers
+    private setupNetworkHandlers() {
         window.addEventListener('online', () => {
             this.logger.info("Device online, attempting reconnect...");
             if (this.settings.syncEnabled) this.initSpacetime();
@@ -147,22 +154,38 @@ export default class SpacetimeSyncPlugin extends Plugin {
 
         window.addEventListener('offline', () => {
             this.logger.info("Device offline, disconnecting...");
-            if (this.client) {
-                this.client.disconnect();
-                this.client = null;
-            }
+            this.cleanupClient();
             this.updateStatusBar("Offline");
+        });
+
+        // Focus Tracking
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.settings.syncEnabled) {
+                this.logger.info("App focused/visible, checking for updates...");
+                this.initSpacetime();
+            }
         });
     }
 
     onunload() {
-        if (this.client) this.client.disconnect();
+        this.cleanupClient();
+    }
+
+    private cleanupClient() {
+        if (this.pushTimeout) clearTimeout(this.pushTimeout);
+        if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+        if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
+        this.pushTimeout = this.reconnectTimeout = this.disconnectTimeout = null;
+        
+        if (this.client) {
+            this.client.disconnect();
+            this.client = null;
+        }
     }
 
     private manualSync() {
         this.logger.info("Manual sync triggered");
         if (!this.settings.host || !this.settings.dbName) {
-            this.logger.warn("Manual sync skipped: host or dbName missing");
             new Notice("SpacetimeDB Plugin: Please configure Host and Database in settings before syncing.");
             return;
         }
@@ -170,7 +193,6 @@ export default class SpacetimeSyncPlugin extends Plugin {
         if (this.client) {
             this.syncAllFiles();
         } else {
-            this.logger.info("SpacetimeDB Plugin: Manually connecting for sync...");
             this.initSpacetime();
         }
     }
@@ -187,6 +209,10 @@ export default class SpacetimeSyncPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+
+    private isMobile(): boolean {
+        return Platform.isMobile || Platform.isAndroidApp;
     }
 
     private initSpacetime() {
@@ -223,7 +249,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     this.updateStatusBar("Connected");
                     
                     if (conn.reducers.registerDevice) {
-                        const os = Platform.isMobile ? (Platform.isAndroidApp ? 'Android' : 'iOS') : 'Desktop';
+                        const os = this.isMobile() ? (Platform.isAndroidApp ? 'Android' : 'iOS') : 'Desktop';
                         const version = this.manifest.version;
                         this.logger.debug(`Registering device: ${deviceId} (${os} v${version})`);
                         conn.reducers.registerDevice({ deviceId, clientVersion: version, os });
@@ -239,10 +265,10 @@ export default class SpacetimeSyncPlugin extends Plugin {
                 .onDisconnect(() => {
                     this.isConnecting = false;
                     this.logger.info("Disconnected from SpacetimeDB");
-                    this.updateStatusBar("Disconnected");
+                    this.updateStatusBar(this.settings.syncEnabled ? "Disconnected" : "Stopped");
                     this.client = null;
                     
-                    if (this.settings.syncEnabled && navigator.onLine) {
+                    if (this.settings.syncEnabled && navigator.onLine && !this.isMobile()) {
                         this.scheduleReconnect();
                     }
                 })
@@ -252,93 +278,111 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     this.updateStatusBar("Error");
                     this.client = null;
                     
-                    if (this.settings.syncEnabled && navigator.onLine) {
+                    if (this.settings.syncEnabled && navigator.onLine && !this.isMobile()) {
                         this.scheduleReconnect();
                     }
                 })
                 .build(); 
 
-            // Setup listeners on the client returned by build()
             this.client.db.document.onInsert((_ctx, row: any) => {
-                this.logger.debug(`Remote insert: ${row.path}`);
                 this.handleRemoteChange(row);
             });
             this.client.db.document.onUpdate((_ctx, _oldRow: any, newRow: any) => {
-                this.logger.debug(`Remote update: ${newRow.path}`);
                 this.handleRemoteChange(newRow);
             });
             this.client.db.document.onDelete((_ctx, row: any) => {
-                this.logger.debug(`Remote delete: ${row.path}`);
                 this.handleRemoteDelete(row);
             });
         } catch (e) {
             this.isConnecting = false;
             this.logger.error("Fatal error initializing SpacetimeDB", e);
-            throw e;
         }
     }
 
     private scheduleReconnect() {
         if (this.reconnectTimeout) return;
-        this.logger.info("Scheduling reconnect in 5 seconds...");
         this.reconnectTimeout = setTimeout(() => {
             this.reconnectTimeout = null;
             this.initSpacetime();
         }, 5000);
     }
 
+    private resetDisconnectTimeout() {
+        if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
+        
+        if (this.isMobile() || this.settings.syncMode === 'manual') {
+            this.disconnectTimeout = setTimeout(() => {
+                this.logger.info("Auto-disconnecting due to inactivity");
+                this.cleanupClient();
+                this.updateStatusBar("Disconnected (Idle)");
+            }, 30000);
+        }
+    }
+
     private async syncAllFiles() {
+        if (this.isSyncing) return;
+        this.isSyncing = true;
+        
         const files = this.app.vault.getFiles();
-        const total = files.length;
+        const filesToSync = this.pendingSyncPaths.size > 0 
+            ? files.filter(f => this.pendingSyncPaths.has(f.path))
+            : files;
+            
+        const total = filesToSync.length;
+        if (total === 0) {
+            this.finalizeSync("No changes", 0, files.length, 0);
+            return;
+        }
+
         this.updateSyncStatus("syncing", `Starting sync of ${total} files`, true);
         let updatedCount = 0;
         let skippedCount = 0;
         let errorCount = 0;
 
-        let current = 0;
-        for (const file of files) {
-            current++;
-            if (current % 10 === 0 || current === total) {
-                this.logger.debug(`Sync progress: ${current}/${total} (${file.path})`);
-            }
-            this.updateStatusBar(`Syncing [${current}/${total}]`);
+        for (const file of filesToSync) {
+            this.updateStatusBar(`Syncing [${updatedCount + skippedCount + errorCount + 1}/${total}]`);
             try {
                 const wasUpdated = await this.handleLocalChange(file);
                 if (wasUpdated) updatedCount++;
                 else skippedCount++;
+                this.pendingSyncPaths.delete(file.path);
             } catch (e) {
                 this.logger.error(`Failed to sync file: ${file.path}`, e);
                 errorCount++;
             }
-            // Small delay to prevent blocking the UI and reduce memory pressure spikes
             await new Promise(resolve => setTimeout(resolve, 5));
         }
         
         const details = `Completed: ${updatedCount} updated, ${skippedCount} skipped, ${errorCount} errors`;
-        this.logger.info(`Full sync completed. ${details}`);
-        this.updateStatusBar("Connected");
-        this.updateSyncStatus("completed", details, false);
-        new Notice(`SpacetimeDB Sync: ${details}`);
+        this.finalizeSync(details, updatedCount, skippedCount, errorCount);
+    }
 
-        if (this.settings.syncMode === 'manual' && this.client) {
-            this.logger.info("Manual sync mode, disconnecting after full sync");
-            this.client.disconnect();
-            this.client = null;
-            this.updateStatusBar("Stopped");
+    private finalizeSync(details: string, updated: number, skipped: number, error: number) {
+        this.logger.info(`Sync completed. ${details}`);
+        this.updateSyncStatus("completed", details, false);
+        this.updateStatusBar("Connected");
+        this.isSyncing = false;
+        
+        if (updated > 0 || error > 0) {
+            new Notice(`SpacetimeDB Sync: ${details}`);
         }
+        
+        this.resetDisconnectTimeout();
     }
 
     private debouncedHandleLocalChange(file: TFile) {
-        if (this.settings.syncMode !== 'auto' || !this.settings.syncEnabled) return;
+        if (!this.settings.syncEnabled) return;
+        this.pendingSyncPaths.add(file.path);
 
-        if (this.pushTimeout) {
-            clearTimeout(this.pushTimeout);
-        }
+        if (this.settings.syncMode !== 'auto') return;
+
+        if (this.pushTimeout) clearTimeout(this.pushTimeout);
 
         this.pushTimeout = setTimeout(async () => {
             this.pushTimeout = null;
             if (this.client) {
                 await this.handleLocalChange(file);
+                this.resetDisconnectTimeout();
             } else if (navigator.onLine) {
                 this.initSpacetime();
             }
@@ -353,17 +397,12 @@ export default class SpacetimeSyncPlugin extends Plugin {
             const bytes = new Uint8Array(binary);
             const hash = await this.calculateHash(bytes);
             
-            // Check if remote already has this exact hash
             const remoteDoc = this.client.db.document.path.find(file.path);
             if (remoteDoc && remoteDoc.hash === hash) {
-                this.logger.debug(`Skipping ${file.path}: hash matches remote`);
                 return false;
             }
 
-            this.logger.debug(`Local change detected: ${file.path} (hash changed)`);
             const content = await this.app.vault.read(file);
-            
-            // ✅ v2.0.4 Fix: Use new Timestamp(bigint) constructor
             const micros = BigInt(file.stat.mtime) * 1000n;
             const modifiedAt = new Timestamp(micros);
 
@@ -376,10 +415,8 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     hash: hash
                 });
                 return true;
-            } else {
-                this.logger.error("upsertDocument reducer not found");
-                return false;
             }
+            return false;
         } catch (e) {
             this.logger.error(`Error in handleLocalChange for ${file.path}`, e);
             return false;
@@ -421,14 +458,12 @@ export default class SpacetimeSyncPlugin extends Plugin {
         const localFile = this.app.vault.getAbstractFileByPath(row.path);
         
         this.isRemoteUpdate = true;
-        this.logger.debug(`Applying remote change to ${row.path}`);
         try {
             if (localFile instanceof TFile) {
                 const remoteMicros = row.lastModified.microsSinceUnixEpoch;
                 const localMicros = BigInt(localFile.stat.mtime) * 1000n;
 
                 if (remoteMicros > localMicros) {
-                    this.logger.debug(`Updating local file: ${row.path}`);
                     if (this.isBinaryFile(row.path)) {
                         const buffer = row.contentBytes.buffer.slice(
                             row.contentBytes.byteOffset,
@@ -438,11 +473,8 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     } else {
                         await this.app.vault.modify(localFile, row.content);
                     }
-                } else {
-                    this.logger.debug(`Skipping remote change for ${row.path}: local is newer or same`);
                 }
             } else {
-                this.logger.debug(`Creating new local file: ${row.path}`);
                 const dir = row.path.split('/').slice(0, -1).join('/');
                 if (dir && !this.app.vault.getAbstractFileByPath(dir)) {
                     await this.ensureDirectory(dir);
@@ -518,10 +550,7 @@ class SpacetimeSyncSettingTab extends PluginSettingTab {
                     if (value) {
                         this.plugin['initSpacetime']();
                     } else {
-                        if (this.plugin['client']) {
-                            this.plugin['client'].disconnect();
-                            this.plugin['client'] = null;
-                        }
+                        this.plugin['cleanupClient']();
                         this.plugin['updateStatusBar']("Stopped");
                     }
                 }));
@@ -578,7 +607,7 @@ class SpacetimeSyncSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Enable Debug Logging')
-            .setDesc('Write detailed logs to debug.log in the plugin folder. Useful for troubleshooting Android crashes.')
+            .setDesc('Write detailed logs to debug.log in the plugin folder.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.debugLogging)
                 .onChange(async (value) => {

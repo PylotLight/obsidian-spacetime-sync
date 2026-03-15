@@ -12,18 +12,27 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.2.1] - 2026-03-16
+## [0.2.2] - 2026-03-16
 
 ### Added
-- **Dynamic Connection Management**: Auto-reconnect loop and online/offline event handlers for robust syncing on mobile.
-- **Debounced Auto-Push**: Efficient background syncing with a configurable bounce period (Push Delay).
-- **Simplified Settings UI**: Replaced redundant toggles with a consolidated "Sync Enabled" switch and a "Sync Mode" (Auto vs Manual) dropdown.
+- **Ephemeral Connection Model**: Optimized for mobile by connecting ONLY during sync and disconnecting immediately after to save battery.
+- **Pending Sync Queue**: Tracks changes while offline or disconnected, ensuring they are pushed efficiently on next connection without a full vault scan.
+- **App Focus Syncing**: Automatically triggers a sync check when the Obsidian app becomes visible/focused.
+- **Idle Timeout**: Automatically disconnects from SpacetimeDB after 30 seconds of inactivity on mobile.
 
 ### Changed
 - Replaced "Connected" and "Live Sync" toggles with more intelligent sync behavior.
 - Manual sync now intelligently manages connection state based on current settings.
 
 ### Fixed
+
+---
+
+## [0.2.1] - 2026-03-16
+
+### Added
+
+### Changed
 
 ---
 
