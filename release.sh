@@ -37,7 +37,7 @@ sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" manifest.json
 sed -i '' "s/## \[Unreleased\]/## \[Unreleased\]\n\n### Added\n\n### Changed\n\n### Fixed\n\n---\n\n## \[$VERSION\] - $DATE/" CHANGELOG.md
 
 # Commit changes
-git add package.json manifest.json CHANGELOG.md
+git add -A
 git commit -m "Release v$VERSION"
 
 # Tag and push with notes

@@ -11,9 +11,8 @@ import {
 } from "spacetimedb";
 
 export default {
-  path: __t.string(),
-  content: __t.string(),
-  contentBytes: __t.byteArray(),
-  modifiedAt: __t.timestamp(),
-  hash: __t.string(),
+  deviceId: __t.string(),
+  status: __t.string(),
+  details: __t.string(),
+  isStart: __t.bool(),
 };

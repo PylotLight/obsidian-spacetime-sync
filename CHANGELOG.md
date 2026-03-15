@@ -12,6 +12,24 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.2.0] - 2026-03-16
+
+### Added
+- **Intelligent Hashing**: Implemented SHA-256 hashing for files to enable efficient sync. Files are only uploaded if their content has actually changed.
+- **Sync Progress Reporting**: Real-time sync status (syncing, completed, failed) and counts (updated, skipped, error) are now reported to the SpacetimeDB backend.
+- **Enhanced Device Metadata**: Devices now report their OS and client version to the backend for better fleet management.
+- **Status Bar Progress**: Improved status bar indicators for sync progress (e.g., "Syncing [10/100]").
+
+### Changed
+- Optimized `syncAllFiles` loop with small delays to prevent UI blocking and improve stability on mobile devices.
+- Refactored `initSpacetime` to handle platform-specific registration (detects Desktop vs Android vs iOS).
+- Updated .gitignore to include .agent/plans
+
+### Fixed
+- Fixed TypeScript type errors in the sync logic related to SpacetimeDB row structures.
+
+---
+
 ## [0.1.6] - 2026-03-14
 
 ### Added

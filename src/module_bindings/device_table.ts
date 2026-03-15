@@ -14,4 +14,10 @@ export default __t.row({
   deviceId: __t.string().primaryKey().name("device_id"),
   ownerIdentity: __t.identity().name("owner_identity"),
   lastSyncTime: __t.timestamp().name("last_sync_time"),
+  clientVersion: __t.option(__t.string()).name("client_version"),
+  os: __t.option(__t.string()),
+  lastSyncStatus: __t.option(__t.string()).name("last_sync_status"),
+  lastSyncDetails: __t.option(__t.string()).name("last_sync_details"),
+  lastSyncStart: __t.option(__t.timestamp()).name("last_sync_start"),
+  lastSyncEnd: __t.option(__t.timestamp()).name("last_sync_end"),
 });

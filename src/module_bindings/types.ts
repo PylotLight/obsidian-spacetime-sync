@@ -14,6 +14,12 @@ export const Device = __t.object("Device", {
   deviceId: __t.string(),
   ownerIdentity: __t.identity(),
   lastSyncTime: __t.timestamp(),
+  clientVersion: __t.option(__t.string()),
+  os: __t.option(__t.string()),
+  lastSyncStatus: __t.option(__t.string()),
+  lastSyncDetails: __t.option(__t.string()),
+  lastSyncStart: __t.option(__t.timestamp()),
+  lastSyncEnd: __t.option(__t.timestamp()),
 });
 export type Device = __Infer<typeof Device>;
 
@@ -22,6 +28,7 @@ export const Document = __t.object("Document", {
   content: __t.string(),
   contentBytes: __t.byteArray(),
   lastModified: __t.timestamp(),
+  hash: __t.option(__t.string()),
 });
 export type Document = __Infer<typeof Document>;
 

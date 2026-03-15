@@ -9,10 +9,12 @@ import { type Infer as __Infer } from "spacetimedb";
 import DeleteDocumentReducer from "../delete_document_reducer";
 import InitReducer from "../init_reducer";
 import RegisterDeviceReducer from "../register_device_reducer";
+import UpdateSyncStatusReducer from "../update_sync_status_reducer";
 import UpsertDocumentReducer from "../upsert_document_reducer";
 
 export type DeleteDocumentParams = __Infer<typeof DeleteDocumentReducer>;
 export type InitParams = __Infer<typeof InitReducer>;
 export type RegisterDeviceParams = __Infer<typeof RegisterDeviceReducer>;
+export type UpdateSyncStatusParams = __Infer<typeof UpdateSyncStatusReducer>;
 export type UpsertDocumentParams = __Infer<typeof UpsertDocumentReducer>;
 

@@ -1,13 +1,8 @@
 import { Plugin, TFile, TAbstractFile, PluginSettingTab, App, Setting, Notice } from 'obsidian';
 import { Identity, Timestamp } from 'spacetimedb'; 
 import { DbConnection } from './module_bindings';
-
-interface Document {
-    path: string;
-    content: string;
-    contentBytes: Uint8Array;
-    lastModified: Timestamp;
-}
+import { Document } from './module_bindings/types';
+import { Platform } from 'obsidian';
 
 interface SpacetimeSyncSettings {
     deviceId: string;
@@ -188,8 +183,10 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     this.updateStatusBar("Connected");
                     
                     if (conn.reducers.registerDevice) {
-                        this.logger.debug(`Registering device: ${deviceId}`);
-                        conn.reducers.registerDevice({ deviceId });
+                        const os = Platform.isMobile ? (Platform.isAndroidApp ? 'Android' : 'iOS') : 'Desktop';
+                        const version = this.manifest.version;
+                        this.logger.debug(`Registering device: ${deviceId} (${os} v${version})`);
+                        conn.reducers.registerDevice({ deviceId, clientVersion: version, os });
                     }
 
                     conn.subscriptionBuilder()
@@ -213,15 +210,15 @@ export default class SpacetimeSyncPlugin extends Plugin {
                 .build(); 
 
             // Setup listeners on the client returned by build()
-            this.client.db.document.onInsert((_ctx, row: Document) => {
+            this.client.db.document.onInsert((_ctx, row: any) => {
                 this.logger.debug(`Remote insert: ${row.path}`);
                 this.handleRemoteChange(row);
             });
-            this.client.db.document.onUpdate((_ctx, _oldRow: Document, newRow: Document) => {
+            this.client.db.document.onUpdate((_ctx, _oldRow: any, newRow: any) => {
                 this.logger.debug(`Remote update: ${newRow.path}`);
                 this.handleRemoteChange(newRow);
             });
-            this.client.db.document.onDelete((_ctx, row: Document) => {
+            this.client.db.document.onDelete((_ctx, row: any) => {
                 this.logger.debug(`Remote delete: ${row.path}`);
                 this.handleRemoteDelete(row);
             });
@@ -234,9 +231,12 @@ export default class SpacetimeSyncPlugin extends Plugin {
     private async syncAllFiles() {
         const files = this.app.vault.getFiles();
         const total = files.length;
-        this.logger.info(`Starting full sync of ${total} files`);
-        let current = 0;
+        this.updateSyncStatus("syncing", `Starting sync of ${total} files`, true);
+        let updatedCount = 0;
+        let skippedCount = 0;
+        let errorCount = 0;
 
+        let current = 0;
         for (const file of files) {
             current++;
             if (current % 10 === 0 || current === total) {
@@ -244,17 +244,22 @@ export default class SpacetimeSyncPlugin extends Plugin {
             }
             this.updateStatusBar(`Syncing [${current}/${total}]`);
             try {
-                await this.handleLocalChange(file);
+                const wasUpdated = await this.handleLocalChange(file);
+                if (wasUpdated) updatedCount++;
+                else skippedCount++;
             } catch (e) {
                 this.logger.error(`Failed to sync file: ${file.path}`, e);
+                errorCount++;
             }
             // Small delay to prevent blocking the UI and reduce memory pressure spikes
             await new Promise(resolve => setTimeout(resolve, 5));
         }
         
-        this.logger.info("Full sync completed");
+        const details = `Completed: ${updatedCount} updated, ${skippedCount} skipped, ${errorCount} errors`;
+        this.logger.info(`Full sync completed. ${details}`);
         this.updateStatusBar("Connected");
-        new Notice("SpacetimeDB Sync: Completed!");
+        this.updateSyncStatus("completed", details, false);
+        new Notice(`SpacetimeDB Sync: ${details}`);
 
         if (!this.settings.liveSync && this.client) {
             this.logger.info("Live sync disabled, disconnecting after full sync");
@@ -264,14 +269,23 @@ export default class SpacetimeSyncPlugin extends Plugin {
         }
     }
 
-    private async handleLocalChange(file: TFile) {
-        if (this.isRemoteUpdate || !this.client) return;
+    private async handleLocalChange(file: TFile): Promise<boolean> {
+        if (this.isRemoteUpdate || !this.client) return false;
         
-        this.logger.debug(`Local change detected: ${file.path}`);
         try {
-            const content = await this.app.vault.read(file);
             const binary = await this.app.vault.readBinary(file);
             const bytes = new Uint8Array(binary);
+            const hash = await this.calculateHash(bytes);
+            
+            // Check if remote already has this exact hash
+            const remoteDoc = this.client.db.document.path.find(file.path);
+            if (remoteDoc && remoteDoc.hash === hash) {
+                this.logger.debug(`Skipping ${file.path}: hash matches remote`);
+                return false;
+            }
+
+            this.logger.debug(`Local change detected: ${file.path} (hash changed)`);
+            const content = await this.app.vault.read(file);
             
             // ✅ v2.0.4 Fix: Use new Timestamp(bigint) constructor
             const micros = BigInt(file.stat.mtime) * 1000n;
@@ -282,13 +296,35 @@ export default class SpacetimeSyncPlugin extends Plugin {
                     path: file.path,
                     content: content,
                     contentBytes: bytes,
-                    modifiedAt: modifiedAt
+                    modifiedAt: modifiedAt,
+                    hash: hash
                 });
+                return true;
             } else {
                 this.logger.error("upsertDocument reducer not found");
+                return false;
             }
         } catch (e) {
             this.logger.error(`Error in handleLocalChange for ${file.path}`, e);
+            return false;
+        }
+    }
+
+    private async calculateHash(bytes: Uint8Array): Promise<string> {
+        // @ts-ignore
+        const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    private updateSyncStatus(status: string, details: string, isStart: boolean) {
+        if (this.client?.reducers.updateSyncStatus) {
+            this.client.reducers.updateSyncStatus({
+                deviceId: this.settings.deviceId,
+                status,
+                details,
+                isStart
+            });
         }
     }
 
@@ -305,7 +341,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
         }
     }
 
-    private async handleRemoteChange(row: Document) {
+    private async handleRemoteChange(row: any) {
         const localFile = this.app.vault.getAbstractFileByPath(row.path);
         
         this.isRemoteUpdate = true;
@@ -357,7 +393,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
         return !!path.match(/\.(png|jpg|jpeg|gif|pdf|zip|docx)$/i);
     }
 
-    private async handleRemoteDelete(row: Document) {
+    private async handleRemoteDelete(row: any) {
         const localFile = this.app.vault.getAbstractFileByPath(row.path);
         if (localFile) {
             this.isRemoteUpdate = true;

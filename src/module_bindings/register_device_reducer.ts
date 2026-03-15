@@ -12,4 +12,6 @@ import {
 
 export default {
   deviceId: __t.string(),
+  clientVersion: __t.string(),
+  os: __t.string(),
 };

@@ -37,6 +37,7 @@ import {
 import DeleteDocumentReducer from "./delete_document_reducer";
 import InitReducer from "./init_reducer";
 import RegisterDeviceReducer from "./register_device_reducer";
+import UpdateSyncStatusReducer from "./update_sync_status_reducer";
 import UpsertDocumentReducer from "./upsert_document_reducer";
 
 // Import all procedure arg schemas
@@ -78,6 +79,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_document", DeleteDocumentReducer),
   __reducerSchema("init", InitReducer),
   __reducerSchema("register_device", RegisterDeviceReducer),
+  __reducerSchema("update_sync_status", UpdateSyncStatusReducer),
   __reducerSchema("upsert_document", UpsertDocumentReducer),
 );
 

@@ -15,4 +15,5 @@ export default __t.row({
   content: __t.string(),
   contentBytes: __t.byteArray().name("content_bytes"),
   lastModified: __t.timestamp().name("last_modified"),
+  hash: __t.option(__t.string()),
 });
