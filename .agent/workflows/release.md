@@ -2,37 +2,46 @@
 description: How to release a new version of the Obsidian Spacetime Sync plugin
 ---
 
-# Release Process Workflow
+# Plugin Release Process Workflow
 
 Follow these steps to ensure a smooth release with correct versioning and changelog notes.
 
-## 1. Update CHANGELOG.md
+## 1. Quality Check
+- **Build**: Ensure the plugin builds without errors.
+// turbo
+```bash
+bun run build
+```
+- **Test**: Verify the latest changes locally in Obsidian if possible.
+
+## 2. Update CHANGELOG.md
 - Add your changes under the `## [Unreleased]` section.
 - Follow the format: `### Added`, `### Changed`, `### Fixed`.
-- Ensure there are actual notes there; the release script will fail if it's empty.
+- **CRITICAL**: The release script parses this section. It must NOT be empty.
 
-## 2. Run the Release Script
+## 3. Run the Release Script
 - Use the `./release.sh` script with the target version.
-- **Example**: `./release.sh 0.1.5`
+- **Example**: `./release.sh 0.2.1`
 - This script will:
     - Update `package.json` and `manifest.json`.
     - Rename `[Unreleased]` in `CHANGELOG.md` to the new version and date.
-    - Commit the changes.
+    - Prepend a fresh `[Unreleased]` section.
+    - **Add ALL changes** (`git add -A`).
+    - Commit with `Release vX.Y.Z`.
     - Create an annotated git tag with the release notes.
     - Push to `main` and push the tag.
 
-## 3. Verify GitHub Actions
-- After pushing the tag, a GitHub Action will automatically:
-    - Build the plugin (`bun run build`).
-    - Create a GitHub Release.
-    - Attach `main.js` and `manifest.json` to the release.
+## 4. Verify GitHub Release
+- After the tag is pushed, view the progress in the GitHub Actions tab.
+- Once finished, check the [Releases](https://github.com/PylotLight/obsidian-spacetime-sync/releases) page to ensure `main.js` and `manifest.json` are attached.
 
 ## Troubleshooting
-- **Tag already exists**: If the tag locally exists but the release failed, delete it with `git tag -d v<version>` and retry.
-- **Empty Unreleased section**: The script requires content in the `[Unreleased]` section. If you have nothing new to add, the release might not be necessary or you should add a "Maintenance" note.
+- **Tag Conflict**: If `v0.2.0` already exists but failed to push, delete it locally: `git tag -d v0.2.0`.
+- **Force Push**: If you realize you forgot a file *after* running the script but *before* the tag works, you may need to `git push origin main --force`.
+- **Incomplete Commit**: The script uses `git add -A` now, so it should catch all new files (like new module bindings).
 
 // turbo
 ## Quick Release Command
 ```bash
-./release.sh 0.1.5
+./release.sh <version>
 ```
