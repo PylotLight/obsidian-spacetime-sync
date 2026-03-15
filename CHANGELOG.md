@@ -12,6 +12,25 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.3.0] - 2026-03-16
+
+### Added
+- **Internal Log View**: Added a dedicated "SpacetimeDB Logs" view inside Obsidian. This replaces the unreliable `debug.log` file opening method and provides a more seamless debugging experience.
+- **Log Management Actions**: Added "Refresh" and "Clear" buttons directly within the Log View.
+
+### Changed
+- **Major Architecture Refactor**: Split the plugin into multiple modules for better maintainability:
+    - `SyncManager`: Encapsulates SpacetimeDB connection and synchronization logic.
+    - `LogManager`: Enhanced with content retrieval for the new view.
+    - `SpacetimeSyncSettingTab`: Extracted to a separate UI module.
+    - `LogView`: New component for internal logging UI.
+    - `types.ts`: Centralized types and interfaces.
+
+### Fixed
+- Fixed issues with opening the debug log file on certain platforms (notably mobile) by providing an internal view.
+
+---
+
 ## [0.2.2] - 2026-03-16
 
 ### Added

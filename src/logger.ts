@@ -90,4 +90,12 @@ export class LogManager {
         }
         this.appendLog(LogLevel.ERROR, fullMessage);
     }
+
+    public async getLogContent(): Promise<string> {
+        const adapter = this.app.vault.adapter;
+        if (await adapter.exists(this.logFilePath)) {
+            return await adapter.read(this.logFilePath);
+        }
+        return "";
+    }
 }
