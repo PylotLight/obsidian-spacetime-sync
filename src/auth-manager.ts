@@ -56,12 +56,13 @@ export class AuthManager {
             httpUrl = 'http://' + httpUrl;
         }
 
-        // Strip trailing slash and path — the login page is at the root
+        // Return the full URL (including path) as the base for the login request.
+        // This allows users to specify /authorize or similar endpoints directly.
         try {
             const u = new URL(httpUrl);
-            return u.origin;
+            return u.toString().replace(/\/$/, ''); // Strip trailing slash for consistency
         } catch {
-            return httpUrl;
+            return httpUrl.replace(/\/$/, '');
         }
     }
 

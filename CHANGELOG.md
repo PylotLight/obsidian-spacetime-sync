@@ -12,13 +12,26 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.4.1] - 2026-03-17
+## [0.4.2] - 2026-03-17
 
 ### Added
 
 ### Changed
 
 ### Fixed
+
+---
+
+## [0.4.2] - 2026-03-17
+
+### Added
+
+### Changed
+- **OIDC Discovery & Login**: Updated `AuthManager` to preserve URL paths, allowing for custom `/authorize` endpoints and root-level auth.
+
+### Fixed
+- Fixed mock OIDC server to show the login page on the root path when a `redirect_uri` is present.
+- Fixed `AuthManager` stripping the path from the Server URL.
 
 ---
 

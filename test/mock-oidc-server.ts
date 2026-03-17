@@ -71,43 +71,47 @@ const server = Bun.serve({
             return Response.json({ keys: [] });
         }
 
-        // ── Root: info page ────────────────────────────────────────
-        if (url.pathname === '/') {
-            return new Response(html(`
-                <span class="badge">Mock OIDC Server</span>
-                <h1>SpacetimeDB Auth Test Server</h1>
-                <p>This server simulates an OIDC login provider for local testing.</p>
-                <p>Configure your Obsidian plugin settings with:<br>
-                   <strong>Auth Provider URL:</strong> <code>http://localhost:${PORT}/authorize</code></p>
-                <p>Click the Login button in Obsidian → this server will auto-complete the auth flow
-                   and redirect back to Obsidian with a test token.</p>
-            `), { headers: { 'Content-Type': 'text/html' } });
-        }
+        // ── Root & Authorization endpoint ──────────────────────────
+        // If redirect_uri is present, we show the login page.
+        // This handles both http://localhost:9876/ and http://localhost:9876/authorize
+        if (url.pathname === '/' || url.pathname === '/authorize') {
+            const redirectUri = url.searchParams.get('redirect_uri');
 
-        // ── Authorization endpoint ─────────────────────────────────
-        // The plugin opens this URL. We show a mock login page that auto-submits.
-        if (url.pathname === '/authorize') {
-            const redirectUri = url.searchParams.get('redirect_uri') ?? 'obsidian://spacetime-sync-auth';
+            if (redirectUri) {
+                // Show mock login page
+                return new Response(html(`
+                    <span class="badge">Mock OIDC Server</span>
+                    <h1>🔑 Login</h1>
+                    <p>Simulating authentication as <strong>Test User</strong> (testuser@mock.local).</p>
+                    <p>You will be automatically redirected to Obsidian in <span id="t">3</span>s…</p>
+                    <button onclick="doLogin()">Login Now</button>
+                    <script>
+                        function doLogin() {
+                            window.location.href = '/callback?redirect_uri=${encodeURIComponent(redirectUri)}';
+                        }
+                        let s = 3;
+                        const el = document.getElementById('t');
+                        const iv = setInterval(() => {
+                            s--;
+                            el.textContent = s;
+                            if (s <= 0) { clearInterval(iv); doLogin(); }
+                        }, 1000);
+                    </script>
+                `), { headers: { 'Content-Type': 'text/html' } });
+            }
 
-            return new Response(html(`
-                <span class="badge">Mock OIDC Server</span>
-                <h1>🔑 Login</h1>
-                <p>Simulating authentication as <strong>Test User</strong> (testuser@mock.local).</p>
-                <p>You will be automatically redirected to Obsidian in <span id="t">3</span>s…</p>
-                <button onclick="doLogin()">Login Now</button>
-                <script>
-                    function doLogin() {
-                        window.location.href = '/callback?redirect_uri=${encodeURIComponent(redirectUri)}';
-                    }
-                    let s = 3;
-                    const el = document.getElementById('t');
-                    const iv = setInterval(() => {
-                        s--;
-                        el.textContent = s;
-                        if (s <= 0) { clearInterval(iv); doLogin(); }
-                    }, 1000);
-                </script>
-            `), { headers: { 'Content-Type': 'text/html' } });
+            // No redirect_uri? Show info page at root
+            if (url.pathname === '/') {
+                return new Response(html(`
+                    <span class="badge">Mock OIDC Server</span>
+                    <h1>SpacetimeDB Auth Test Server</h1>
+                    <p>This server simulates an OIDC login provider for local testing.</p>
+                    <p>Configure your Obsidian plugin settings with:<br>
+                       <strong>Server URL:</strong> <code>http://localhost:${PORT}</code></p>
+                    <p>Click the Login button in Obsidian → this server will auto-complete the auth flow
+                       and redirect back to Obsidian with a test token.</p>
+                `), { headers: { 'Content-Type': 'text/html' } });
+            }
         }
 
         // ── Callback endpoint ──────────────────────────────────────
@@ -150,14 +154,15 @@ console.log(`
 
 Test setup:
   1. In Obsidian plugin settings, enable Auth and set:
-       Auth Provider URL: http://localhost:${PORT}/authorize
+       Server URL: http://localhost:${PORT}
   2. Click "Login" button in settings
   3. Browser will open → auto-redirect back to Obsidian with a token
   4. Or copy the token from the browser and paste it manually (for mobile)
 
 Endpoints:
-  GET /               Info page
-  GET /authorize      Mock login page (auto-redirects after 3s)  
+  GET /               Info page (if no redirect_uri)
+  GET /               Login page (if redirect_uri present)
+  GET /authorize      Login page (if redirect_uri present)
   GET /callback       Generates token, redirects to obsidian://spacetime-sync-auth
   GET /.well-known/openid-configuration  OIDC discovery doc
 
