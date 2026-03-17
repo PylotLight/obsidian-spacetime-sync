@@ -147,6 +147,45 @@ const server = Bun.serve({
 
         return new Response('Not Found', { status: 404 });
     },
+    websocket: {
+        open(ws: any) {
+            console.log(`\n📡 WebSocket connected`);
+            // @ts-ignore - Bun ws data
+            const { cookies, token } = ws.data;
+            if (cookies?.CF_Authorization) {
+                console.log(`   Auth: Cookie "CF_Authorization" present`);
+            } else if (token) {
+                console.log(`   Auth: Token query parameter present`);
+            } else {
+                console.warn(`   Auth: WARNING! No auth token found in upgrade request.`);
+            }
+        },
+        message(ws: any, message: any) {
+            console.log(`   Message from client: ${message}`);
+            ws.send("pong");
+        },
+        close(ws: any) {
+            console.log(`   WebSocket disconnected`);
+        },
+        // Handle the upgrade manually to extract headers/cookies
+        upgrade(req: Request, server: any) {
+            const url = new URL(req.url);
+            const cookies: Record<string, string> = {};
+            const cookieHeader = req.headers.get("Cookie");
+            if (cookieHeader) {
+                cookieHeader.split(";").forEach((c: string) => {
+                    const [k, v] = c.trim().split("=");
+                    cookies[k] = v;
+                });
+            }
+            const token = url.searchParams.get("token");
+
+            const success = server.upgrade(req, {
+                data: { cookies, token }
+            });
+            return success ? undefined : new Response("Upgrade failed", { status: 400 });
+        }
+    } as any,
 });
 
 console.log(`

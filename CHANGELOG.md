@@ -12,6 +12,21 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.4.4] - 2026-03-17
+
+### Added
+- **Proxy Auth Fallback**: Added a token-in-URL fallback for environments where cookies are unreliable (e.g., mobile or restrictive proxies).
+- **Mock OIDC Server Enhancements**: Added WebSocket support and auth verification to the mock testing server.
+
+### Changed
+- **Obsidian Desktop Auth**: Switched proxy cookie injection to use Electron's session API to bypass origin restrictions.
+- `SyncManager.initSpacetime` is now asynchronous to ensure auth setup completes before connection.
+
+### Fixed
+- Fixed proxy authentication connection errors (`{"isTrusted":true}`) caused by cross-origin cookie limitations in Obsidian.
+
+---
+
 ## [0.4.3] - 2026-03-17
 
 ### Added

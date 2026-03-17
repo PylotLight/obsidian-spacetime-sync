@@ -72,7 +72,7 @@ export class SyncManager {
         return Platform.isMobile || Platform.isAndroidApp;
     }
 
-    public initSpacetime() {
+    public async initSpacetime() {
         if (this.isConnecting || this.client) return;
 
         const { dbName, deviceId, syncEnabled, authEnabled } = this.settings;
@@ -110,15 +110,13 @@ export class SyncManager {
 
         try {
             // If auth is enabled, inject the proxy token as a cookie BEFORE connecting.
-            // Electron automatically includes document.cookie in outgoing WebSocket upgrade
-            // requests, so the protecting proxy can validate it. Do NOT use .withToken() —
-            // that API targets SpacetimeDB's own identity system, which rejects proxy JWTs.
             if (authEnabled && this.authManager.isAuthenticated()) {
-                this.authManager.injectCookie();
+                await this.authManager.injectCookie();
             }
 
+            const authedHost = this.authManager.getAuthenticatedUrl(host);
             this.client = DbConnection.builder()
-                .withUri(host)
+                .withUri(authedHost)
                 .withDatabaseName(dbName)
                 .onConnect((conn, identity: Identity) => {
                     this.isConnecting = false;

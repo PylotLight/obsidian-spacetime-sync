@@ -88,6 +88,26 @@ export class AuthManager {
     }
 
     /**
+     * Returns a URL with the auth token appended as a query parameter.
+     * Useful as a fallback for proxies that can't read cookies.
+     */
+    public getAuthenticatedUrl(baseUrl: string): string {
+        if (!this.settings.authEnabled) return baseUrl;
+        const token = this.getToken();
+        if (!token) return baseUrl;
+
+        try {
+            const url = new URL(baseUrl);
+            url.searchParams.set('token', token);
+            return url.toString();
+        } catch {
+            // Fallback for non-URL strings
+            const separator = baseUrl.includes('?') ? '&' : '?';
+            return `${baseUrl}${separator}token=${encodeURIComponent(token)}`;
+        }
+    }
+
+    /**
      * Opens the proxy login page in the system browser.
      * The proxy must redirect back to obsidian://spacetime-sync-auth?token=...
      */
@@ -135,20 +155,44 @@ export class AuthManager {
      * Electron includes cookies automatically in WS upgrade requests to the same origin,
      * which lets the protecting proxy (Pangolin, Cloudflare Access, etc.) validate the session.
      */
-    public injectCookie() {
+    public async injectCookie() {
         const token = this.getToken();
         if (!token) return;
 
-        try {
-            const cookieName = this.settings.authCookieName || 'CF_Authorization';
-            const expires = this.settings.authTokenExpiry
-                ? new Date(this.settings.authTokenExpiry).toUTCString()
-                : '';
+        const host = this.settings.host.trim();
+        const cookieName = this.settings.authCookieName || 'CF_Authorization';
+        const expiry = this.settings.authTokenExpiry;
 
+        try {
+            // DESKTOP: Use Electron's session API if available
+            // This is necessary because Obsidian runs on app:// origin,
+            // and document.cookie won't be sent to the SpacetimeDB origin.
+            const electron = (window as any).require ? (window as any).require('electron') : null;
+            const remote = electron?.remote;
+            const session = remote?.session || electron?.session;
+
+            if (session?.defaultSession?.cookies) {
+                const url = new URL(host.replace(/^ws/, 'http'));
+                await session.defaultSession.cookies.set({
+                    url: url.origin,
+                    name: cookieName,
+                    value: encodeURIComponent(token),
+                    domain: url.hostname,
+                    path: '/',
+                    secure: url.protocol === 'https:',
+                    sameSite: 'no_restriction', // Allow cross-origin
+                    expirationDate: expiry ? expiry / 1000 : undefined
+                });
+                this.logger.debug(`[Electron] Injected cookie "${cookieName}" for ${url.origin}`);
+                return;
+            }
+
+            // MOBILE / FALLBACK: document.cookie
+            const expires = expiry ? new Date(expiry).toUTCString() : '';
             const expiryPart = expires ? `; expires=${expires}` : '';
             document.cookie = `${cookieName}=${encodeURIComponent(token)}; path=/${expiryPart}; SameSite=Lax`;
 
-            this.logger.debug(`Injected auth cookie "${cookieName}"`);
+            this.logger.debug(`Injected auth cookie "${cookieName}" via document.cookie`);
         } catch (e) {
             this.logger.error('Failed to inject auth cookie', e);
         }
