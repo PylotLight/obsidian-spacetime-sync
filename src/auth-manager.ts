@@ -74,13 +74,17 @@ export class AuthManager {
         const host = this.settings.host.trim();
         if (!host) return host;
 
-        // Already a WS URL — return as-is
-        if (host.startsWith('ws://') || host.startsWith('wss://')) return host;
-
-        // Convert HTTP scheme
-        return host
+        // Already a WS URL — check if it has a path and strip it
+        let wsUrl = host
             .replace(/^https:\/\//, 'wss://')
             .replace(/^http:\/\//, 'ws://');
+
+        try {
+            const u = new URL(wsUrl);
+            return `${u.protocol}//${u.host}`; // Return protocol + host only, no path
+        } catch {
+            return wsUrl.replace(/\/$/, '');
+        }
     }
 
     /**

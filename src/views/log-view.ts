@@ -53,6 +53,8 @@ export class LogView extends ItemView {
         this.logContentEl.style.backgroundColor = 'var(--background-secondary)';
         this.logContentEl.style.borderRadius = '5px';
         this.logContentEl.style.fontSize = '0.85em';
+        this.logContentEl.style.userSelect = 'text';
+        this.logContentEl.style.webkitUserSelect = 'text'; // For Electron/Safari
 
         this.refreshLogs();
     }

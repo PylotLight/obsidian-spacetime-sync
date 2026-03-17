@@ -99,7 +99,8 @@ export class SyncManager {
         }
 
         this.isConnecting = true;
-        this.logger.info(`Connecting to ${host}/${dbName} as ${deviceId}`);
+        const cleanHost = host.replace(/\/$/, '');
+        this.logger.info(`Connecting to ${cleanHost}/${this.settings.dbName} as ${deviceId}`);
         this.updateStatusBar("Connecting...");
 
         if (this.reconnectTimeout) {

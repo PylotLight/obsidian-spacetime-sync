@@ -12,9 +12,20 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.4.2] - 2026-03-17
+## [0.4.3] - 2026-03-17
 
 ### Added
+
+### Changed
+- **Log View UI**: Enabled text selection in the Log View to allow copying debug information.
+
+### Fixed
+- Fixed "Failed to fetch" (TypeError) connection errors by automatically stripping paths from WebSocket URLs in `AuthManager`.
+- Fixed double slashes in connection log messages.
+
+---
+
+## [0.4.2] - 2026-03-17
 
 ### Changed
 - **OIDC Discovery & Login**: Updated `AuthManager` to preserve URL paths, allowing for custom `/authorize` endpoints and root-level auth.
