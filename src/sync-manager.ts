@@ -3,6 +3,7 @@ import { Identity, Timestamp } from 'spacetimedb';
 import { DbConnection } from './module_bindings';
 import { SpacetimeSyncSettings, SyncStatusState } from './types';
 import type { LogManager } from './logger';
+import type { AuthManager } from './auth-manager';
 
 export class SyncManager {
     private app: App;
@@ -10,6 +11,7 @@ export class SyncManager {
     private logger: LogManager;
     private manifest: any;
     private saveSettings: () => Promise<void>;
+    private authManager: AuthManager;
 
     private client: DbConnection | null = null;
     private isRemoteUpdate: boolean = false;
@@ -21,12 +23,20 @@ export class SyncManager {
     private pendingSyncPaths: Set<string> = new Set();
     private isSyncing: boolean = false;
 
-    constructor(app: App, settings: SpacetimeSyncSettings, logger: LogManager, manifest: any, saveSettings: () => Promise<void>) {
+    constructor(
+        app: App,
+        settings: SpacetimeSyncSettings,
+        logger: LogManager,
+        manifest: any,
+        saveSettings: () => Promise<void>,
+        authManager: AuthManager,
+    ) {
         this.app = app;
         this.settings = settings;
         this.logger = logger;
         this.manifest = manifest;
         this.saveSettings = saveSettings;
+        this.authManager = authManager;
     }
 
     public setStatusBarItem(item: HTMLElement) {
@@ -65,10 +75,18 @@ export class SyncManager {
     public initSpacetime() {
         if (this.isConnecting || this.client) return;
 
-        const { host, dbName, deviceId, syncEnabled } = this.settings;
+        const { host, dbName, deviceId, syncEnabled, authEnabled } = this.settings;
 
         if (!syncEnabled || !host || !dbName) {
             this.updateStatusBar("Stopped");
+            return;
+        }
+
+        // If auth is enabled, require a valid token before connecting
+        if (authEnabled && !this.authManager.isAuthenticated()) {
+            this.logger.warn("Auth is enabled but no valid token — blocking connection. Login via Settings.");
+            this.updateStatusBar("Auth Required");
+            new Notice("SpacetimeDB: Login required. Open Settings → Authentication to login.");
             return;
         }
 
@@ -87,9 +105,22 @@ export class SyncManager {
         }
 
         try {
-            this.client = DbConnection.builder()
+            const builder = DbConnection.builder()
                 .withUri(host)
-                .withDatabaseName(dbName)
+                .withDatabaseName(dbName);
+
+            // Pass the proxy auth token via SpacetimeDB's token mechanism.
+            // This sets Authorization: Bearer <token> on the initial WebSocket upgrade request,
+            // which auth-protecting proxies (Pangolin, Cloudflare Access) can validate.
+            if (authEnabled) {
+                const token = this.authManager.getToken();
+                if (token) {
+                    this.logger.debug("Attaching proxy auth token to connection");
+                    builder.withToken(token);
+                }
+            }
+
+            this.client = builder
                 .onConnect((conn, identity: Identity) => {
                     this.isConnecting = false;
                     this.logger.info(`Connected. Identity: ${identity.toHexString()}`);

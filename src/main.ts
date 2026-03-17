@@ -2,6 +2,7 @@ import { Plugin, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import { SpacetimeSyncSettings, DEFAULT_SETTINGS } from './types';
 import { LogManager } from './logger';
 import { SyncManager } from './sync-manager';
+import { AuthManager } from './auth-manager';
 import { SpacetimeSyncSettingTab } from './settings-tab';
 import { LogView, LOG_VIEW_TYPE } from './views/log-view';
 
@@ -9,6 +10,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
     settings!: SpacetimeSyncSettings;
     public logger!: LogManager;
     public syncManager!: SyncManager;
+    public authManager!: AuthManager;
 
     async onload() {
         this.logger = new LogManager(this.app, this);
@@ -21,12 +23,36 @@ export default class SpacetimeSyncPlugin extends Plugin {
             await this.saveSettings();
         }
 
+        // Auth manager — handles OIDC browser redirect flow for proxy auth
+        this.authManager = new AuthManager(
+            this.settings,
+            this.logger,
+            () => this.saveSettings(),
+            () => {
+                // Refresh settings UI when auth state changes
+                // If sync is enabled and we just got a token, reconnect
+                if (this.settings.syncEnabled && this.authManager.isAuthenticated()) {
+                    this.syncManager.cleanup();
+                    this.syncManager.initSpacetime();
+                }
+            }
+        );
+
+        // Register the obsidian:// protocol handler for auth callbacks
+        // This is called when the browser redirects to:
+        //   obsidian://spacetime-sync-auth?token=JWT[&expires=EPOCH_MS]
+        this.registerObsidianProtocolHandler('spacetime-sync-auth', async (params) => {
+            this.logger.info('Auth callback received', params);
+            await this.authManager.handleCallback(params);
+        });
+
         this.syncManager = new SyncManager(
             this.app, 
-            this.settings, 
-            this.logger, 
+            this.settings,
+            this.logger,
             this.manifest,
-            () => this.saveSettings()
+            () => this.saveSettings(),
+            this.authManager,
         );
 
         this.registerView(
@@ -80,6 +106,23 @@ export default class SpacetimeSyncPlugin extends Plugin {
             callback: async () => {
                 await this.logger.clearLogs();
                 new Notice("SpacetimeDB: Logs cleared.");
+            }
+        });
+
+        this.addCommand({
+            id: 'spacetime-login',
+            name: 'Login to Auth Proxy',
+            callback: () => {
+                this.authManager.login();
+            }
+        });
+
+        this.addCommand({
+            id: 'spacetime-logout',
+            name: 'Logout from Auth Proxy',
+            callback: async () => {
+                await this.authManager.logout();
+                this.syncManager.cleanup();
             }
         });
 
