@@ -53,6 +53,42 @@ const server = Bun.serve({
     async fetch(req: Request) {
         const url = new URL(req.url);
 
+        // ── WebSocket Upgrade ──────────────────────────────────────
+        // ── WebSocket Upgrade ──────────────────────────────────────
+        const upgradeHeader = req.headers.get("upgrade");
+        if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
+            const cookies: Record<string, string> = {};
+            const cookieHeader = req.headers.get("Cookie");
+            if (cookieHeader) {
+                cookieHeader.split(";").forEach((c: string) => {
+                    const [k, v] = c.trim().split("=");
+                    cookies[k] = v;
+                });
+            }
+            const token = url.searchParams.get("token");
+
+            // Extract the connection_id from the URL query params
+            const connIdHex = url.searchParams.get("connection_id") || "00000000000000000000000000000000";
+
+            // Inspect what protocols the SDK supports/requests
+            const reqProtocol = req.headers.get("sec-websocket-protocol");
+            let negotiatedProtocol = "v2.bsatn.spacetimedb"; // Default fallback
+
+            const headers = new Headers();
+            if (reqProtocol) {
+                const protocols = reqProtocol.split(",").map(p => p.trim());
+                negotiatedProtocol = protocols[0]; // Echo back the first requested protocol
+                headers.set("Sec-WebSocket-Protocol", negotiatedProtocol);
+            }
+
+            const success = server.upgrade(req, {
+                headers,
+                // Pass the extracted connection_id to the ws.open handler
+                data: { cookies, token, protocol: negotiatedProtocol, connIdHex }
+            });
+            return success ? undefined : new Response("Upgrade failed", { status: 400 });
+        }
+
         // ── OIDC Discovery Document ────────────────────────────────
         if (url.pathname === '/.well-known/openid-configuration') {
             return Response.json({
@@ -145,13 +181,21 @@ const server = Bun.serve({
             `), { headers: { 'Content-Type': 'text/html' } });
         }
 
+        // ── WebSocket Upgrade ──────────────────────────────────────
+        if (req.headers.get("upgrade") === "websocket") {
+            return undefined; // Let Bun handle the upgrade
+        }
+
         return new Response('Not Found', { status: 404 });
     },
     websocket: {
         open(ws: any) {
             console.log(`\n📡 WebSocket connected`);
+
             // @ts-ignore - Bun ws data
-            const { cookies, token } = ws.data;
+            const { cookies, token, protocol, connIdHex } = ws.data;
+            console.log(`   Negotiated protocol: ${protocol}`);
+
             if (cookies?.CF_Authorization) {
                 console.log(`   Auth: Cookie "CF_Authorization" present`);
             } else if (token) {
@@ -159,31 +203,60 @@ const server = Bun.serve({
             } else {
                 console.warn(`   Auth: WARNING! No auth token found in upgrade request.`);
             }
+
+            const mockIdentityHex = "0000000000000000000000000000000000000000000000000000000000000000";
+            const mockTokenStr = "mock-session-token";
+
+            // Serve the payload in the format the SDK negotiated
+            if (protocol.includes("text") || protocol.includes("json")) {
+                console.log(`   Sending JSON IdentityToken handshake`);
+                const handshakeMsg = JSON.stringify({
+                    IdentityToken: {
+                        identity: mockIdentityHex,
+                        connection_id: connIdHex,
+                        token: mockTokenStr
+                    }
+                });
+                ws.send(handshakeMsg);
+            } else {
+                console.log(`   Sending BSATN Binary IdentityToken handshake`);
+
+                // Construct SpacetimeDB BSATN format for ServerMessage::IdentityToken
+                const tokenBytes = new TextEncoder().encode(mockTokenStr);
+
+                // V2 Layout: 1 (Tag) + 32 (Identity) + 16 (ConnectionId) + 4 (String Length) + string bytes
+                const buf = new Uint8Array(1 + 32 + 16 + 4 + tokenBytes.length);
+                const view = new DataView(buf.buffer);
+
+                // Byte 0: Tag for Message::IdentityToken is 0
+                view.setUint8(0, 0);
+
+                // Bytes 1 to 32: Identity (32 bytes of zeros for the mock)
+                for (let i = 0; i < 32; i++) {
+                    buf[1 + i] = parseInt(mockIdentityHex.slice(i * 2, i * 2 + 2), 16) || 0;
+                }
+
+                // Bytes 33 to 48: ConnectionId (16 bytes)
+                const parsedConnId = connIdHex.replace(/-/g, ''); // strip dashes if any
+                for (let i = 0; i < 16; i++) {
+                    buf[33 + i] = parseInt(parsedConnId.slice(i * 2, i * 2 + 2), 16) || 0;
+                }
+
+                // Bytes 49 to 52: Token String Length (u32 little-endian)
+                view.setUint32(49, tokenBytes.length, true);
+
+                // Bytes 53 onwards: Token String Bytes
+                buf.set(tokenBytes, 53);
+
+                // Sending a Uint8Array explicitly triggers a Binary WebSocket Frame in Bun
+                ws.send(buf);
+            }
         },
         message(ws: any, message: any) {
-            console.log(`   Message from client: ${message}`);
-            ws.send("pong");
+            console.log(`   Message from client received (${message instanceof Uint8Array ? 'Binary' : 'Text'} frame)`);
         },
         close(ws: any) {
             console.log(`   WebSocket disconnected`);
-        },
-        // Handle the upgrade manually to extract headers/cookies
-        upgrade(req: Request, server: any) {
-            const url = new URL(req.url);
-            const cookies: Record<string, string> = {};
-            const cookieHeader = req.headers.get("Cookie");
-            if (cookieHeader) {
-                cookieHeader.split(";").forEach((c: string) => {
-                    const [k, v] = c.trim().split("=");
-                    cookies[k] = v;
-                });
-            }
-            const token = url.searchParams.get("token");
-
-            const success = server.upgrade(req, {
-                data: { cookies, token }
-            });
-            return success ? undefined : new Response("Upgrade failed", { status: 400 });
         }
     } as any,
 });

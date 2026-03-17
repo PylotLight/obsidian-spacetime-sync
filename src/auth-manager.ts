@@ -172,18 +172,29 @@ export class AuthManager {
             const session = remote?.session || electron?.session;
 
             if (session?.defaultSession?.cookies) {
-                const url = new URL(host.replace(/^ws/, 'http'));
-                await session.defaultSession.cookies.set({
+                const isSecure = host.startsWith('https') || host.startsWith('wss');
+                const urlStr = host.replace(/^wss?:\/\//, isSecure ? 'https://' : 'http://').replace(/^ws?:\/\//, 'http://');
+                const url = new URL(urlStr);
+
+                // Skip injection for localhost if not secure, as it often fails with security policy errors
+                // and we'll be using URL-based auth anyway.
+                if (url.hostname === 'localhost' && !isSecure) {
+                    this.logger.debug(`[Electron] Skipping cookie injection for insecure localhost: ${url.origin}`);
+                    return;
+                }
+
+                const cookieDetails: any = {
                     url: url.origin,
                     name: cookieName,
                     value: encodeURIComponent(token),
-                    domain: url.hostname,
                     path: '/',
-                    secure: url.protocol === 'https:',
-                    sameSite: 'no_restriction', // Allow cross-origin
-                    expirationDate: expiry ? expiry / 1000 : undefined
-                });
-                this.logger.debug(`[Electron] Injected cookie "${cookieName}" for ${url.origin}`);
+                    expirationDate: expiry ? expiry / 1000 : undefined,
+                    secure: isSecure,
+                    sameSite: isSecure ? 'no_restriction' : 'lax'
+                };
+
+                this.logger.debug(`[Electron] Injecting cookie: ${cookieName} for ${url.origin} (isSecure=${isSecure}, sameSite=${cookieDetails.sameSite})`);
+                await session.defaultSession.cookies.set(cookieDetails);
                 return;
             }
 

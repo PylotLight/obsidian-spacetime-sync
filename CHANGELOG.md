@@ -12,6 +12,24 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.4.5] - 2026-03-17
+
+### Added
+- **SpacetimeDB v2 Support**: Upgraded the custom WebSocket connection logic to fully support SpacetimeDB v2's BSATN binary protocol (`v2.bsatn.spacetimedb`).
+- **SDK Connection Reference**: Documented the SpacetimeDB SDK WebSocket connection logic and OIDC mock server integration for easier testing and debugging.
+
+### Changed
+- **WebSocket Connection**: Overrode the SDK's WebSocket creation to ensure authentication tokens in the URL are preserved during the "Upgrade" handshake. Added manual construction of the SpacetimeDB subscription path (`v1/database/.../subscribe`) to ensure the request hits the correct endpoint behind proxies.
+- **Binary Frame Handling**: Explicitly set `ws.binaryType = 'arraybuffer'` on the native WebSocket to prevent browser `Blob` type errors when the SDK parses SpacetimeDB's binary frames.
+- **Compression**: Switched to `compression: 'none'` for WebSocket connections when using the custom creator to ensure stable communication.
+
+### Fixed
+- **Cookie Security Policy**: Fixed `Failed to set cookie` errors on `localhost` by skipping injection for insecure HTTP origins in Electron, relying instead on URL-based auth fallback.
+- **WebSocket Handshake & Subprotocols**: Fixed the `{"isTrusted":true}` connection error caused by the SDK stripping auth tokens, `connection_id`, and subscription paths from query parameters.
+- **Binary Offset Parsing**: Ensured the 16-byte `connection_id` is successfully preserved during connection upgrades so the SpacetimeDB SDK can correctly parse the `IdentityToken` binary layout without throwing `RangeError` offset exceptions.
+
+---
+
 ## [0.4.4] - 2026-03-17
 
 ### Added

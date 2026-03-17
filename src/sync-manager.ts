@@ -115,9 +115,45 @@ export class SyncManager {
             }
 
             const authedHost = this.authManager.getAuthenticatedUrl(host);
+            const authedUrl = new URL(authedHost);
+            const tokenParam = authedUrl.searchParams.get('token');
+
             this.client = DbConnection.builder()
                 .withUri(authedHost)
                 .withDatabaseName(dbName)
+                .withCompression('none')
+                .withWSFn(async (options) => {
+                    // Use http(s) for URL construction to ensure standard resolution
+                    const proto = options.url.protocol === 'wss:' ? 'https:' : 'http:';
+                    const baseUrl = `${proto}//${options.url.host}`;
+                    const finalUrl = new URL(`/v1/database/${options.nameOrAddress}/subscribe`, baseUrl);
+
+                    // Re-inject SDK parameters (e.g., connection_id)
+                    options.url.searchParams.forEach((value, key) => {
+                        finalUrl.searchParams.set(key, value);
+                    });
+
+                    // Re-inject the proxy 'token' param
+                    if (tokenParam) {
+                        finalUrl.searchParams.set('token', tokenParam);
+                    }
+
+                    // Re-inject compression/light mode
+                    finalUrl.searchParams.set('compression', options.compression === 'gzip' ? 'Gzip' : 'None');
+                    if (options.lightMode) finalUrl.searchParams.set('light', 'true');
+
+                    const finalWsUrl = finalUrl.toString().replace(/^http/, 'ws');
+                    this.logger.debug(`[WebSocket] Connecting to ${finalWsUrl}`);
+
+                    const WS = (window as any).WebSocket || (window as any).MozWebSocket;
+                    const ws = new WS(finalWsUrl, options.wsProtocol);
+
+                    // MUST tell the browser to return ArrayBuffer instead of Blob
+                    // for the SpacetimeDB BSATN binary parser to work correctly.
+                    ws.binaryType = "arraybuffer";
+
+                    return ws;
+                })
                 .onConnect((conn, identity: Identity) => {
                     this.isConnecting = false;
                     this.logger.info(`Connected. Identity: ${identity.toHexString()}`);

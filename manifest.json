@@ -1,7 +1,7 @@
 {
   "id": "obsidian-spacetime-sync",
   "name": "Obsidian Spacetime Sync",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "minAppVersion": "0.15.0",
   "description": "Real-time sync plugin for Obsidian using SpacetimeDB v2",
   "author": "light",
