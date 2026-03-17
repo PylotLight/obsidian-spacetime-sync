@@ -11,6 +11,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
     public logger!: LogManager;
     public syncManager!: SyncManager;
     public authManager!: AuthManager;
+    private settingsTab!: SpacetimeSyncSettingTab;
 
     async onload() {
         this.logger = new LogManager(this.app, this);
@@ -23,14 +24,14 @@ export default class SpacetimeSyncPlugin extends Plugin {
             await this.saveSettings();
         }
 
-        // Auth manager — handles OIDC browser redirect flow for proxy auth
         this.authManager = new AuthManager(
             this.settings,
             this.logger,
             () => this.saveSettings(),
             () => {
-                // Refresh settings UI when auth state changes
-                // If sync is enabled and we just got a token, reconnect
+                // Refresh the settings UI live when auth state changes
+                this.settingsTab?.display();
+                // Reconnect if sync is on and we just got authenticated
                 if (this.settings.syncEnabled && this.authManager.isAuthenticated()) {
                     this.syncManager.cleanup();
                     this.syncManager.initSpacetime();
@@ -38,16 +39,14 @@ export default class SpacetimeSyncPlugin extends Plugin {
             }
         );
 
-        // Register the obsidian:// protocol handler for auth callbacks
-        // This is called when the browser redirects to:
-        //   obsidian://spacetime-sync-auth?token=JWT[&expires=EPOCH_MS]
+        // Handle obsidian://spacetime-sync-auth?token=JWT&expires=EPOCH_MS
         this.registerObsidianProtocolHandler('spacetime-sync-auth', async (params) => {
-            this.logger.info('Auth callback received', params);
+            this.logger.info('Auth callback received');
             await this.authManager.handleCallback(params);
         });
 
         this.syncManager = new SyncManager(
-            this.app, 
+            this.app,
             this.settings,
             this.logger,
             this.manifest,
@@ -60,26 +59,21 @@ export default class SpacetimeSyncPlugin extends Plugin {
             (leaf) => new LogView(leaf, this)
         );
 
-        this.addSettingTab(new SpacetimeSyncSettingTab(this.app, this));
+        this.settingsTab = new SpacetimeSyncSettingTab(this.app, this);
+        this.addSettingTab(this.settingsTab);
 
-        // Add ribbon icon for manual sync
         this.addRibbonIcon('refresh-cw', 'Sync with SpacetimeDB', () => {
             this.syncManager.manualSync();
         });
 
-        // Add command palette
         this.addCommand({
             id: 'spacetime-manual-sync',
             name: 'Manual Sync with SpacetimeDB',
-            callback: () => {
-                this.syncManager.manualSync();
-            }
+            callback: () => this.syncManager.manualSync()
         });
 
-        // Initialize status bar
         const statusBarItem = this.addStatusBarItem();
         this.syncManager.setStatusBarItem(statusBarItem);
-
         this.syncManager.init();
 
         this.registerEvent(this.app.vault.on('modify', (file) => file instanceof TFile && this.syncManager.debouncedHandleLocalChange(file)));
@@ -95,9 +89,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
         this.addCommand({
             id: 'spacetime-show-logs',
             name: 'Show Debug Logs',
-            callback: () => {
-                this.openLogView();
-            }
+            callback: () => this.openLogView()
         });
 
         this.addCommand({
@@ -112,9 +104,7 @@ export default class SpacetimeSyncPlugin extends Plugin {
         this.addCommand({
             id: 'spacetime-login',
             name: 'Login to Auth Proxy',
-            callback: () => {
-                this.authManager.login();
-            }
+            callback: () => this.authManager.login()
         });
 
         this.addCommand({
@@ -146,7 +136,6 @@ export default class SpacetimeSyncPlugin extends Plugin {
                         const url = new URL(text.replace('spacetimedb://', 'http://'));
                         const host = `ws://${url.host}${url.pathname === '/' ? '' : url.pathname}`;
                         const dbName = url.searchParams.get('db');
-                        
                         if (host && dbName) {
                             this.settings.host = host;
                             this.settings.dbName = dbName;
@@ -179,7 +168,6 @@ export default class SpacetimeSyncPlugin extends Plugin {
             this.syncManager.updateStatusBar("Offline");
         });
 
-        // Focus Tracking
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && this.settings.syncEnabled) {
                 this.logger.info("App focused/visible, checking for updates...");
@@ -202,7 +190,6 @@ export default class SpacetimeSyncPlugin extends Plugin {
 
     async openLogView() {
         const { workspace } = this.app;
-
         let leaf: WorkspaceLeaf | null = null;
         const leaves = workspace.getLeavesOfType(LOG_VIEW_TYPE);
 
@@ -210,13 +197,9 @@ export default class SpacetimeSyncPlugin extends Plugin {
             leaf = leaves[0];
         } else {
             leaf = workspace.getRightLeaf(false);
-            if (leaf) {
-                await leaf.setViewState({ type: LOG_VIEW_TYPE, active: true });
-            }
+            if (leaf) await leaf.setViewState({ type: LOG_VIEW_TYPE, active: true });
         }
 
-        if (leaf) {
-            workspace.revealLeaf(leaf);
-        }
+        if (leaf) workspace.revealLeaf(leaf);
     }
 }

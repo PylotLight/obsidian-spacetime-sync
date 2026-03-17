@@ -75,7 +75,10 @@ export class SyncManager {
     public initSpacetime() {
         if (this.isConnecting || this.client) return;
 
-        const { host, dbName, deviceId, syncEnabled, authEnabled } = this.settings;
+        const { dbName, deviceId, syncEnabled, authEnabled } = this.settings;
+
+        // Resolve the WS URL — supports ws://, wss://, http://, https://, bare host:port
+        const host = this.authManager.getWsUrl();
 
         if (!syncEnabled || !host || !dbName) {
             this.updateStatusBar("Stopped");
@@ -84,9 +87,9 @@ export class SyncManager {
 
         // If auth is enabled, require a valid token before connecting
         if (authEnabled && !this.authManager.isAuthenticated()) {
-            this.logger.warn("Auth is enabled but no valid token — blocking connection. Login via Settings.");
+            this.logger.warn("Auth enabled but no valid token — open Settings → Authentication to login.");
             this.updateStatusBar("Auth Required");
-            new Notice("SpacetimeDB: Login required. Open Settings → Authentication to login.");
+            new Notice("SpacetimeDB: Login required. Open Settings → Authentication.");
             return;
         }
 
@@ -105,22 +108,17 @@ export class SyncManager {
         }
 
         try {
-            const builder = DbConnection.builder()
-                .withUri(host)
-                .withDatabaseName(dbName);
-
-            // Pass the proxy auth token via SpacetimeDB's token mechanism.
-            // This sets Authorization: Bearer <token> on the initial WebSocket upgrade request,
-            // which auth-protecting proxies (Pangolin, Cloudflare Access) can validate.
-            if (authEnabled) {
-                const token = this.authManager.getToken();
-                if (token) {
-                    this.logger.debug("Attaching proxy auth token to connection");
-                    builder.withToken(token);
-                }
+            // If auth is enabled, inject the proxy token as a cookie BEFORE connecting.
+            // Electron automatically includes document.cookie in outgoing WebSocket upgrade
+            // requests, so the protecting proxy can validate it. Do NOT use .withToken() —
+            // that API targets SpacetimeDB's own identity system, which rejects proxy JWTs.
+            if (authEnabled && this.authManager.isAuthenticated()) {
+                this.authManager.injectCookie();
             }
 
-            this.client = builder
+            this.client = DbConnection.builder()
+                .withUri(host)
+                .withDatabaseName(dbName)
                 .onConnect((conn, identity: Identity) => {
                     this.isConnecting = false;
                     this.logger.info(`Connected. Identity: ${identity.toHexString()}`);

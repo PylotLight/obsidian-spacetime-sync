@@ -12,20 +12,34 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.4.0] - 2026-03-17
+## [0.4.1] - 2026-03-17
+
+### Added
+
+### Changed
+
+### Fixed
+
+---
+
+## [0.4.1] - 2026-03-17
 
 ### Added
 - **Proxy Auth (OIDC Browser Redirect)**: Added authentication support for SpacetimeDB instances behind an auth-protected reverse proxy (Pangolin, Cloudflare Access, etc.).
   - New `AuthManager` handles the OIDC browser redirect flow: opens the proxy login page in the system browser, receives the token via `obsidian://spacetime-sync-auth` protocol handler, and persists it in settings.
-  - Settings UI has a new **Authentication** section: toggle, provider URL, login/logout buttons with status, and token expiry indication.
+  - Settings UI has a new **Authentication** section: toggle, login/logout buttons with status, and token expiry indication.
   - **Mobile fallback**: Manual token paste field in settings for when browser→Obsidian redirect is unreliable on Android/iOS.
   - New `Login to Auth Proxy` and `Logout from Auth Proxy` command palette entries.
   - New `test/mock-oidc-server.ts`: standalone Bun server that simulates the full redirect flow for local testing without a real proxy setup.
 
 ### Changed
-- `SyncManager` now checks for a valid proxy auth token when auth is enabled; blocks connection and prompts login if missing.
+- **Unified Server URL**: Replaced separate "SpacetimeDB Host" and "Auth Provider URL" with a single "Server URL" field. The login page is now derived from the same host.
+- **Proxy Auth Mechanism**: Switched from `.withToken()` (which SpacetimeDB rejected) to **cookie injection**. The proxy token is now set as a browser cookie before connection, allowing the proxy to validate it via the WebSocket upgrade request.
+- **Live UI Updates**: The settings tab now refreshes automatically when authentication status changes, without needing to close and reopen the settings window.
 
 ### Fixed
+- Fixed "Unauthorized" connection errors caused by passing proxy JWTs to the SpacetimeDB identity system.
+- Fixed mock OIDC server rendering issues with box-drawing characters.
 
 ---
 

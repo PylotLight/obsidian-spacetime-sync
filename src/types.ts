@@ -1,6 +1,6 @@
 export interface SpacetimeSyncSettings {
     deviceId: string;
-    host: string;
+    host: string;           // Public server URL, e.g. https://my-proxy.example.com or ws://192.168.1.10:4000
     dbName: string;
     syncEnabled: boolean;
     syncMode: 'auto' | 'manual';
@@ -8,9 +8,9 @@ export interface SpacetimeSyncSettings {
     debugLogging: boolean;
     // Auth proxy settings
     authEnabled: boolean;
-    authProviderUrl: string;  // Login URL of the protecting proxy
-    authToken: string;        // JWT/session token received from the proxy
-    authTokenExpiry: number;  // Unix epoch ms; 0 = no expiry / not set
+    authToken: string;         // JWT/session token from the protecting proxy
+    authTokenExpiry: number;   // Unix epoch ms; 0 = no expiry
+    authCookieName: string;    // Cookie name the proxy expects (e.g. CF_Authorization for Cloudflare)
 }
 
 export const DEFAULT_SETTINGS: SpacetimeSyncSettings = {
@@ -22,9 +22,9 @@ export const DEFAULT_SETTINGS: SpacetimeSyncSettings = {
     pushDelay: 2000,
     debugLogging: false,
     authEnabled: false,
-    authProviderUrl: '',
     authToken: '',
     authTokenExpiry: 0,
+    authCookieName: 'CF_Authorization',
 };
 
-export type SyncStatusState = "Stopped" | "Connecting..." | "Connected" | "Disconnected" | "Offline" | "Error" | "Disconnected (Idle)";
+export type SyncStatusState = "Stopped" | "Connecting..." | "Connected" | "Disconnected" | "Offline" | "Error" | "Disconnected (Idle)" | "Auth Required";

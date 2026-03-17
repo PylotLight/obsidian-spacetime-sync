@@ -23,7 +23,6 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.syncEnabled = value;
                     await this.plugin.saveSettings();
-                    
                     if (value) {
                         this.plugin.syncManager.initSpacetime();
                     } else {
@@ -34,7 +33,7 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Sync Mode')
-            .setDesc('Auto: Automatically sync changes with a delay. Manual: Only sync when ribbon icon is clicked.')
+            .setDesc('Auto: sync changes after a delay. Manual: only sync when the ribbon icon is clicked.')
             .addDropdown(dropdown => dropdown
                 .addOption('auto', 'Auto (Live)')
                 .addOption('manual', 'Manual')
@@ -46,7 +45,7 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Push Delay (ms)')
-            .setDesc('The delay (bounce period) in milliseconds before pushing local changes to the server.')
+            .setDesc('Debounce period before pushing local changes to the server.')
             .addText(text => text
                 .setPlaceholder('2000')
                 .setValue(this.plugin.settings.pushDelay.toString())
@@ -59,19 +58,19 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('SpacetimeDB Host')
-            .setDesc('The WebSocket URL of your SpacetimeDB instance')
+            .setName('Server URL')
+            .setDesc('URL of your SpacetimeDB instance or proxy. Accepts ws://, wss://, http://, https://, or bare host:port. When auth is enabled, login opens this same host in your browser.')
             .addText(text => text
-                .setPlaceholder('ws://your-host.url')
+                .setPlaceholder('https://db.example.com  or  ws://192.168.1.10:4000')
                 .setValue(this.plugin.settings.host)
                 .onChange(async (value) => {
-                    this.plugin.settings.host = value;
+                    this.plugin.settings.host = value.trim();
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Database Name')
-            .setDesc('The name of your deployed SpacetimeDB module')
+            .setDesc('The name of your deployed SpacetimeDB module.')
             .addText(text => text
                 .setPlaceholder('my-database-name')
                 .setValue(this.plugin.settings.dbName)
@@ -83,35 +82,23 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
         // ── Authentication ───────────────────────────────────────────
         containerEl.createEl('h3', { text: 'Authentication' });
         containerEl.createEl('p', {
-            text: 'Enable this if your SpacetimeDB is behind an auth-protected proxy (e.g. Pangolin, Cloudflare Access). The token is passed to the proxy on connection.',
+            text: 'Enable if your SpacetimeDB is behind an auth-protected proxy (Pangolin, Cloudflare Access, etc.). The token is injected as a browser cookie before connecting — the proxy validates it on the WebSocket upgrade.',
             cls: 'setting-item-description',
         });
 
         new Setting(containerEl)
             .setName('Enable Auth')
-            .setDesc('Require authentication before connecting to the proxy.')
+            .setDesc('Require login before connecting to the proxy.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.authEnabled)
                 .onChange(async (value) => {
                     this.plugin.settings.authEnabled = value;
                     await this.plugin.saveSettings();
-                    this.display(); // Refresh to show/hide auth fields
+                    this.display();
                 }));
 
         if (this.plugin.settings.authEnabled) {
-            // Auth provider URL
-            new Setting(containerEl)
-                .setName('Auth Provider URL')
-                .setDesc('The login page URL of your proxy. After login, it must redirect back to obsidian://spacetime-sync-auth?token=...')
-                .addText(text => text
-                    .setPlaceholder('https://your-proxy.example.com/auth')
-                    .setValue(this.plugin.settings.authProviderUrl)
-                    .onChange(async (value) => {
-                        this.plugin.settings.authProviderUrl = value.trim();
-                        await this.plugin.saveSettings();
-                    }));
-
-            // Status + Login/Logout
+            // Auth status + login/logout
             const statusText = this.plugin.authManager.getStatusText();
             new Setting(containerEl)
                 .setName('Auth Status')
@@ -131,24 +118,34 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
                         this.display();
                     }));
 
-            // ── Mobile fallback: paste token manually ─────────────────
-            // On Android, the obsidian:// redirect from a browser is unreliable.
-            // Users can copy the token from the browser and paste it here instead.
-            const isMobile = Platform.isMobile || Platform.isAndroidApp || Platform.isIosApp;
-            const mobileDesc = isMobile
-                ? 'On mobile, the browser redirect may not return to Obsidian automatically. Copy the token from your browser after login and paste it here.'
-                : 'You can also paste a token manually (useful on mobile where browser redirects may be unreliable).';
+            // Cookie name (advanced)
+            new Setting(containerEl)
+                .setName('Auth Cookie Name')
+                .setDesc('Cookie name the proxy expects. Cloudflare Access uses "CF_Authorization". Check your proxy docs.')
+                .addText(text => text
+                    .setPlaceholder('CF_Authorization')
+                    .setValue(this.plugin.settings.authCookieName)
+                    .onChange(async (value) => {
+                        this.plugin.settings.authCookieName = value.trim() || 'CF_Authorization';
+                        await this.plugin.saveSettings();
+                    }));
 
+            // Mobile fallback: manual token paste
+            const isMobile = Platform.isMobile || Platform.isAndroidApp || Platform.isIosApp;
             containerEl.createEl('h4', { text: 'Manual Token Entry' });
+            containerEl.createEl('p', {
+                text: isMobile
+                    ? 'If the browser did not redirect back automatically, copy the token from the browser page and paste it here.'
+                    : 'Paste a token manually (useful on mobile where browser redirect may not return automatically).',
+                cls: 'setting-item-description',
+            });
 
             let tokenInput = '';
             new Setting(containerEl)
                 .setName('Paste Token')
-                .setDesc(mobileDesc)
                 .addText(text => {
                     text.setPlaceholder('Paste your auth token here...')
                         .onChange(value => { tokenInput = value.trim(); });
-                    // On mobile, make the input larger for easier tapping
                     if (isMobile) text.inputEl.style.minWidth = '200px';
                     return text;
                 })
@@ -190,10 +187,10 @@ export class SpacetimeSyncSettingTab extends PluginSettingTab {
                 }));
 
         containerEl.createEl('p', { text: 'You can also open the log view: ' })
-            .createEl('a', { 
-                text: 'Show Logs', 
+            .createEl('a', {
+                text: 'Show Logs',
                 href: '#',
-                cls: 'internal-link' 
+                cls: 'internal-link'
             })
             .onClickEvent(async (e) => {
                 e.preventDefault();
