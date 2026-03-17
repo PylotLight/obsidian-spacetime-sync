@@ -17,6 +17,7 @@ bun run build
 ## 2. Update CHANGELOG.md
 - Add your changes under the `## [Unreleased]` section.
 - Follow the format: `### Added`, `### Changed`, `### Fixed`.
+- Never delete a previous release version and merge it into a new one, only add a new one.
 - **CRITICAL**: The release script parses this section. It must NOT be empty.
 
 ## 3. Run the Release Script
